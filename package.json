@@ -55,14 +55,22 @@
       "required": false,
       "default": false,
       "label": "Certificate Validation Enabled"
+    },
+    {
+      "name": "githubToken",
+      "description": "GitHub token for Models API",
+      "type": "textfield",
+      "required": false,
+      "title": "GitHub Token",
+      "password": true
     }
   ],
   "commands": [
     {
       "name": "ollama-chat",
-      "title": "Chat with Ollama",
-      "subtitle": "Ollama",
-      "description": "Chat with Ollama",
+      "title": "Chat with GitHub Model",
+      "subtitle": "GitHub",
+      "description": "Chat using GitHub Models API",
       "mode": "view"
     },
     {
@@ -180,9 +188,9 @@
     },
     {
       "name": "ollama-models",
-      "title": "Manage Models",
-      "subtitle": "Ollama",
-      "description": "Manage installed models",
+      "title": "List GitHub Models",
+      "subtitle": "GitHub",
+      "description": "Browse models available from GitHub",
       "mode": "view"
     },
     {
