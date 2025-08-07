@@ -55,6 +55,13 @@
       "required": false,
       "default": false,
       "label": "Certificate Validation Enabled"
+    },
+    {
+      "name": "githubToken",
+      "description": "GitHub token used to access GitHub Models API",
+      "type": "textfield",
+      "required": false,
+      "title": "GitHub Token"
     }
   ],
   "commands": [
