@@ -1,25 +1,16 @@
 import { getPreferenceValues, LocalStorage, showToast, Toast } from "@raycast/api";
 import { Document } from "langchain/document";
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { OllamaEmbeddings } from "@langchain/community/embeddings/ollama";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import * as React from "react";
-import { OllamaApiChatMessageRole, OllamaServerAuthorizationMethod } from "../../ollama/enum";
-import { Ollama } from "../../ollama/ollama";
-import {
-  OllamaApiChatMessage,
-  OllamaApiChatRequestBody,
-  OllamaApiChatResponse,
-  OllamaApiTagsResponseModel,
-  OllamaServerAuth,
-} from "../../ollama/types";
+import { OllamaApiChatMessageRole } from "../../ollama/enum";
+import { OllamaApiChatMessage, OllamaApiTagsResponseModel } from "../../ollama/types";
 import { AddSettingsCommandChat, GetSettingsCommandChatByIndex } from "../../settings/settings";
-import { RaycastChat, SettingsChatModel } from "../../settings/types";
+import { RaycastChat } from "../../settings/types";
 import { Preferences, RaycastImage } from "../../types";
 import { GetAvailableModel, PromptTokenParser } from "../function";
 import { McpServerConfig, McpToolInfo } from "../../mcp/types";
 import { McpClientMultiServer } from "../../mcp/mcp";
 import { PromptContext } from "./type";
+import { chatCompletion, GitHubChatMessage } from "../../github/api";
 import "../../polyfill/node-fetch";
 
 const preferences = getPreferenceValues<Preferences>();
@@ -123,152 +114,6 @@ export function ClipboardConversation(chat?: RaycastChat): string {
 }
 
 /**
- * Get Headers for Ollama Langchain.
- * @param settings - Ollama Server Auth
- */
-function LangChainGetOllamaHeaders(settings?: OllamaServerAuth): Record<string, string> | undefined {
-  if (!settings) return undefined;
-  if (settings && settings.mode === OllamaServerAuthorizationMethod.BASIC)
-    return {
-      Authorization: `${settings.mode} ${btoa(`${settings.username}:${settings.password}`)}`,
-    };
-  if (settings && settings.mode === OllamaServerAuthorizationMethod.BEARER)
-    return { Authorization: `${settings.mode} ${settings.token}` };
-}
-
-/**
- * Get Configured LangChain OllamaEmbedding
- * @param settings
- */
-function LangChainGetOllamaEmbeddings(settings: SettingsChatModel): OllamaEmbeddings {
-  const headers = LangChainGetOllamaHeaders(settings.server.auth);
-  return new OllamaEmbeddings({ baseUrl: settings.server.url, model: settings.tag, headers: headers });
-}
-
-/**
- * Get how many tokens are required for given string.
- * @param text
- * @returns tokens
- */
-function StringToTokens(text: string): number {
-  return Number(Number(text.length / 3).toFixed(0));
-}
-
-/**
- * Get how many tokens are required for given document.
- * @param document
- * @returns tokens
- */
-function DocumentToTokens(document: Document<Record<string, any>>): number {
-  return StringToTokens(document.pageContent);
-}
-
-/**
- * Get how many tokens are required for given documents.
- * @param documents
- * @returns tokens
- */
-function DocumentsToTokens(documents: Document<Record<string, any>>[]): number {
-  let o = 0;
-  for (const d of documents) o += DocumentToTokens(d);
-  return o;
-}
-
-/**
- * Get how many tokens are required by chat history.
- * @param chat
- * @returns tokens
- */
-function ChatToTokens(chat: RaycastChat): number {
-  if (chat.messages.length === 0) return 0;
-  const lastMessage = chat.messages[chat.messages.length - 1];
-  let o = 0;
-  if (lastMessage.prompt_eval_count) o += lastMessage.prompt_eval_count;
-  if (lastMessage.eval_count) o += lastMessage.eval_count;
-  if (chat.messages.length > Number(preferences.ollamaChatHistoryMessagesNumber)) {
-    const removedMessage =
-      chat.messages[chat.messages.length - Number(preferences.ollamaChatHistoryMessagesNumber) - 1];
-    if (removedMessage.prompt_eval_count) o -= removedMessage.prompt_eval_count;
-    if (removedMessage.eval_count) o -= removedMessage.eval_count;
-  }
-  return o;
-}
-
-/**
- * Retrieval of relevant information by affinity that fits all available contextual windows.
- * @param query
- * @param token - available tokens.
- * @param documents
- * @param ollamaModelEmbedding - ollama model settings.
- */
-async function GetDocumentByAffinity(
-  query: string,
-  token: number,
-  documents: Document<Record<string, any>>[],
-  ollamaModelEmbedding: SettingsChatModel
-): Promise<Document<Record<string, any>>[]> {
-  await showToast({ style: Toast.Style.Animated, title: "📥 Embeddings..." });
-  const textsplitter = new RecursiveCharacterTextSplitter({
-    chunkOverlap: 200,
-    chunkSize: 1000,
-  });
-  const vectorstore = await MemoryVectorStore.fromDocuments(
-    await textsplitter.splitDocuments(documents),
-    LangChainGetOllamaEmbeddings(ollamaModelEmbedding)
-  );
-  const retriever = vectorstore.asRetriever(((token * 3) / 1000) * 0.8);
-  return await retriever.invoke(query);
-}
-
-/**
- * Convert documents into raw json.
- * @param documents
- */
-function DocumentsToJson(documents: Document<Record<string, any>>[]): string {
-  const o = [];
-  for (const document of documents) {
-    o.push({
-      source: document.metadata.source,
-      content: document.pageContent,
-    });
-  }
-  return JSON.stringify(o);
-}
-
-/**
- * Get document knowledge, if tokens are not enough perform embeddings ans search by affinity.
- * @param query
- * @param chat
- * @param documents
- * @param image
- */
-async function GetDocuments(
-  query: string,
-  chat: RaycastChat,
-  documents: Document<Record<string, any>>[],
-  image: RaycastImage[] | undefined
-): Promise<string> {
-  /* Get Model used for inference */
-  let model = chat.models.main;
-  if (chat.models.tools && chat.mcp_server) model = chat.models.tools;
-  if (chat.models.vision && image) model = chat.models.vision;
-
-  /* Get required tokens */
-  const ollama = new Ollama(model.server);
-  const availableToken = ollama.OllamaApiShowParseModelfile(await ollama.OllamaApiShow(model.tag)).parameter.num_ctx;
-  const requiredToken = StringToTokens(query) + ChatToTokens(chat) + DocumentsToTokens(documents);
-
-  /* If tokens are not enough proceed with embedding */
-  if (requiredToken > availableToken) {
-    let model = chat.models.main;
-    if (chat.models.embedding) model = chat.models.embedding;
-    documents = await GetDocumentByAffinity(query, availableToken - StringToTokens(query), documents, model);
-  }
-
-  return DocumentsToJson(documents);
-}
-
-/**
  * Get Messages for Inference with Context data.
  * @param chat.
  * @param query - User Prompt.
@@ -317,61 +162,6 @@ async function InitMcpClient(): Promise<void> {
 }
 
 /**
- * Inference with tools from Mcp Servers.
- * @param query - User Prompt.
- * @param chat.
- * @param image.
- */
-async function ToolsCall(
-  query: string,
-  chat: RaycastChat,
-  image?: RaycastImage[]
-): Promise<[string | undefined, McpToolInfo[] | undefined]> {
-  await showToast({ style: Toast.Style.Animated, title: "🔧 Tool Calling..." });
-
-  /* Initialize McpClient if undefined. */
-  if (McpClient === undefined) {
-    await InitMcpClient().catch((e) => {
-      showToast({ title: "Error", message: e, style: Toast.Style.Failure });
-    });
-    if (McpClient === undefined) {
-      delete chat.mcp_server;
-      return [undefined, undefined];
-    }
-  }
-
-  /* Select model tag to use. */
-  let model = chat.models.main;
-  if (chat.models.tools) model = chat.models.tools;
-
-  /* Get Tools */
-  const tools = await McpClient.GetToolsOllama(true, chat.mcp_server);
-
-  /* Inference with tools */
-  const o = new Ollama(model.server);
-  const body: OllamaApiChatRequestBody = {
-    model: model.tag,
-    messages: GetMessagesForInference(chat, query, image),
-    keep_alive: model.keep_alive,
-    tools: tools,
-  };
-  const response = await o.OllamaApiChatNoStream(body);
-
-  /* Call tools on Mcp Server */
-  if (response.message?.tool_calls) {
-    /* Get Mcp Tools Info */
-    const toolsInfo = McpClient.GetToolsInfoForOllama(response.message.tool_calls);
-
-    /* Call tools */
-    const data = await McpClient.CallToolsForOllama(response.message.tool_calls);
-
-    if (data.length > 0) return [JSON.stringify(data), toolsInfo];
-  }
-
-  return [undefined, undefined];
-}
-
-/**
  * Inference Task.
  */
 async function Inference(
@@ -388,68 +178,60 @@ async function Inference(
   let model = chat.models.main;
   if (image && chat.models.vision) model = chat.models.vision;
 
-  const body: OllamaApiChatRequestBody = {
-    model: model.tag,
-    messages: GetMessagesForInference(chat, query, image, context),
-    keep_alive: model.keep_alive,
-  };
+  const messagesGh: GitHubChatMessage[] = [];
+  // previous chat history
+  chat.messages
+    .slice(chat.messages.length - Number(preferences.ollamaChatHistoryMessagesNumber))
+    .forEach((v) => v.messages.forEach((m) => messagesGh.push({ role: m.role, content: m.content })));
+
+  // user message (with context already embedded in content by GetMessagesForInference)
+  const latest = GetMessagesForInference(chat, query, image, context);
+  const last = latest[latest.length - 1];
+  messagesGh.push({ role: last.role, content: last.content });
 
   const ml = chat.messages.length;
-  const o = new Ollama(model.server);
-  o.OllamaApiChat(body)
-    .then(async (emiter) => {
-      emiter.on("data", (data: string) => {
-        setChat((prevState) => {
-          if (prevState) {
-            if (prevState.messages.length === ml) {
-              return {
-                ...prevState,
-                messages: prevState.messages.concat({
-                  model: chat.models.main.tag,
-                  created_at: "",
-                  images: image,
-                  files:
-                    documents && documents.map((d) => d.metadata.source).filter((v, i) => i === documents.indexOf(v)),
-                  messages: [
-                    { role: OllamaApiChatMessageRole.USER, content: query },
-                    { role: OllamaApiChatMessageRole.ASSISTANT, content: data },
-                  ],
-                  done: false,
-                }),
-              };
-            } else {
-              const m: RaycastChat = JSON.parse(JSON.stringify(prevState));
-              m.messages[m.messages.length - 1].messages[1].content += data;
-              return {
-                ...prevState,
-                messages: m.messages,
-              };
-            }
-          }
-        });
-      });
-      emiter.on("done", async (data: OllamaApiChatResponse) => {
-        await showToast({ style: Toast.Style.Success, title: "🧠 Inference Done." });
-        setChat((prevState) => {
-          if (prevState) {
-            const m: RaycastChat = JSON.parse(JSON.stringify(prevState));
-            m.messages[m.messages.length - 1] = {
-              ...data,
+  const prefs = getPreferenceValues<Preferences>();
+  const token = prefs.githubToken || "";
+
+  try {
+    const resp = await chatCompletion(token, model.tag, messagesGh);
+    const answer = resp.choices?.[0]?.message?.content || "";
+
+    // append new message
+    setChat((prevState) => {
+      if (prevState) {
+        if (prevState.messages.length === ml) {
+          return {
+            ...prevState,
+            messages: prevState.messages.concat({
+              model: model.tag,
+              created_at: new Date().toISOString(),
               images: image,
-              files: documents && documents.map((d) => d.metadata.source).filter((v, i) => i === documents.indexOf(v)),
-              tools: context.tools && context.tools.meta,
-              messages: m.messages[m.messages.length - 1].messages,
-            };
-            setLoading(false);
-            return { ...m };
-          }
-        });
-      });
-    })
-    .catch(async (e: Error) => {
-      await showToast({ style: Toast.Style.Failure, title: "Error:", message: e.message });
-      setLoading(false);
+              files: documents && documents.map((d) => (d as any).metadata?.source).filter((v, i, a) => a.indexOf(v) === i),
+              messages: [
+                { role: OllamaApiChatMessageRole.USER, content: query },
+                { role: OllamaApiChatMessageRole.ASSISTANT, content: answer },
+              ],
+              done: true,
+            } as any),
+          } as any;
+        }
+      }
     });
+    await showToast({ style: Toast.Style.Success, title: "🧠 Inference Done." });
+  } catch (e: any) {
+    await showToast({ style: Toast.Style.Failure, title: "Error:", message: String(e?.message || e) });
+  } finally {
+    setLoading(false);
+  }
+}
+
+function DocumentsToJson(documents: Document<Record<string, any>>[]): string {
+  const o: any[] = [];
+  for (const document of documents) {
+    o.push({ source: (document as any).metadata?.source, content: document.pageContent });
+  }
+  return JSON.stringify(o);
 }
 
 export async function Run(
@@ -468,13 +250,7 @@ export async function Run(
   query = await PromptTokenParser(query);
 
   /* If documents are defined add them to the context */
-  if (documents) context.documents = await GetDocuments(query, chat, documents, image);
-
-  /* Call Tools of mcp_server is defined */
-  if (chat.mcp_server) {
-    const [data, meta] = await ToolsCall(query, chat, image);
-    if (data && meta) context.tools = { data: data, meta: meta };
-  }
+  if (documents) context.documents = DocumentsToJson(documents);
 
   /* Start Inference */
   await Inference(query, image, documents, context, chat, setChat, setLoading);

@@ -7,9 +7,8 @@ import {
   Toast,
   getSelectedFinderItems,
   BrowserExtension,
+  LocalStorage,
 } from "@raycast/api";
-import { Ollama } from "../ollama/ollama";
-import { GetOllamaServerByName, GetOllamaServers } from "../settings/settings";
 import { Preferences, RaycastImage } from "../types";
 import {
   ErrorRaycastBrowserExtantion,
@@ -21,110 +20,53 @@ import {
 import fs from "fs";
 import fetch from "node-fetch";
 import { fileTypeFromBuffer } from "file-type";
-import { OllamaApiTagsResponseModel } from "../ollama/types";
 import { UiModelDetails } from "./types";
+import { listCatalog } from "../github/api";
+import { OllamaApiTagsResponseModel } from "../ollama/types";
+import type { Ollama } from "../ollama/ollama";
 
 /**
- * Get Ollama Server Array.
- * @returns Servers Names Array.
+ * Servers list (GitHub only).
  */
 export async function GetServerArray(): Promise<string[]> {
-  const s = await GetOllamaServers();
-  const a = [...s.keys()].sort();
-  const al = a.filter((v) => v === "Local");
-  const ao = a.filter((v) => v !== "Local");
-  if (a.length > 1) return ["All", ...al, ...ao];
-  return [...al, ...ao];
+  return ["GitHub"];
 }
 
 /**
- * Format "expires_at" value returnet by Ollama PS.
- * @param expires_at
- * @returns "expires_at" formatted as "0h0m0s".
- */
-export function FormatOllamaPsModelExpireAtFormat(expires_at: string): string {
-  const now = new Date();
-  const expire = new Date(expires_at);
-
-  let timeoutS = "";
-  let timeout = Math.floor((expire.getTime() - now.getTime()) * 0.001);
-  ["s", "m", "h"].every((v) => {
-    const timeoutT = timeout / 60;
-    if (v === "h") {
-      if (timeout > 1000) {
-        timeoutS = "♾️";
-      } else {
-        timeoutS = `${Math.floor(timeout)}${v}` + timeoutS;
-      }
-      return false;
-    }
-    if (timeoutT < 1) {
-      timeoutS = `${Math.floor(timeout)}${v}` + timeoutS;
-      return false;
-    }
-    timeoutS = `${Math.round((timeoutT % 1) * 60)}${v}` + timeoutS;
-    timeout = Math.floor(timeoutT);
-    return true;
-  });
-
-  return timeoutS;
-}
-
-/**
- * Get Ollama Server Class.
- * @returns Server Map.
- */
-export async function GetServerClass(): Promise<Map<string, Ollama>> {
-  const o: Map<string, Ollama> = new Map();
-  const s = await GetOllamaServers();
-  s.forEach((s, k) => o.set(k, new Ollama(s)));
-  return o;
-}
-
-/**
- * Get Ollama Available Models.
- * @returns Map with All Available Model.
+ * Get GitHub Models catalog and map to UiModelDetails.
  */
 export async function GetModels(): Promise<Map<string, UiModelDetails[]>> {
-  const o = new Map<string, UiModelDetails[]>();
-  const s = await GetServerClass();
-  await Promise.all(
-    [...s.entries()].map(async (s): Promise<void> => {
-      const tags = await s[1].OllamaApiTags().catch(async (e: Error) => {
-        await showToast({ style: Toast.Style.Failure, title: `'${s[0]}' Server`, message: e.message });
-        return undefined;
-      });
-      if (tags)
-        o.set(
-          s[0],
-          await Promise.all(
-            tags.models.map(async (tag): Promise<UiModelDetails> => {
-              const show = await s[1].OllamaApiShow(tag.name).catch(async (e: Error) => {
-                await showToast({ style: Toast.Style.Failure, title: `'${s[0]}' Server`, message: e.message });
-                return undefined;
-              });
-              return {
-                name: tag.name,
-                capabilities: show && show.capabilities,
-              };
-            })
-          )
-        );
-    })
-  );
-  return o;
-}
-
-/**
- * Get Available Model for given Server.
- * @param server - Ollama Server Name.
- * @param List of Avalibale Models.
- */
-export async function GetAvailableModel(server: string): Promise<OllamaApiTagsResponseModel[]> {
-  const s = await GetOllamaServerByName(server);
-  const o = new Ollama(s);
-  const m = await o.OllamaApiTags();
-  return m.models;
+  const prefs = getPreferenceValues<Preferences>();
+  const token = prefs.githubToken || "";
+  const map = new Map<string, UiModelDetails[]>();
+  try {
+    const catalog = await listCatalog(token);
+    const items: UiModelDetails[] = catalog.map((m) => {
+      const caps: string[] = [];
+      if (m.supported_output_modalities?.includes("text")) caps.push("completion");
+      if (m.supported_input_modalities?.includes("image")) caps.push("vision");
+      if (m.capabilities?.includes("tool-calling")) caps.push("tools");
+      if (m.tags?.some((t) => /embed/i.test(t) || /embedding/i.test(t))) caps.push("embedding");
+      const meta: Record<string, string | number | string[]> = {
+        Publisher: m.publisher,
+        Registry: m.registry,
+        Version: m.version || "-",
+        "Rate limit tier": m.rate_limit_tier || "-",
+        "Input modalities": m.supported_input_modalities?.length ? m.supported_input_modalities : ["-"] ,
+        "Output modalities": m.supported_output_modalities?.length ? m.supported_output_modalities : ["-"] ,
+        Tags: m.tags?.length ? m.tags : ["-"],
+        Capabilities: m.capabilities?.length ? m.capabilities : ["-"],
+        "Max input tokens": m.limits?.max_input_tokens ?? "-",
+        "Max output tokens": m.limits?.max_output_tokens ?? "-",
+      };
+      return { name: m.id, capabilities: caps, meta, summary: m.summary, url: m.html_url };
+    });
+    map.set("GitHub", items);
+  } catch (e: any) {
+    await showToast({ style: Toast.Style.Failure, title: "GitHub Models", message: String(e?.message || e) });
+    map.set("GitHub", []);
+  }
+  return map;
 }
 
 /**
@@ -299,4 +241,38 @@ async function GetPromptTokenSelectionText(): Promise<string | undefined> {
       break;
   }
   return query;
+}
+
+/**
+ * Get Available Model for server (GitHub only).
+ */
+export async function GetAvailableModel(server: string): Promise<OllamaApiTagsResponseModel[]> {
+  const prefs = getPreferenceValues<Preferences>();
+  const token = prefs.githubToken || "";
+  if (server !== "GitHub") return [];
+  const catalog = await listCatalog(token);
+  // Map to minimal shape compatible with existing usages
+  return catalog.map((m) => ({
+    name: m.id,
+    modified_at: m.version || "",
+    size: 0,
+    digest: "",
+    details: { format: "", family: "", families: [], parameter_size: "", quantization_level: "" },
+  }));
+}
+
+/**
+ * Get Server Class (GitHub only).
+ */
+export async function GetServerClass(): Promise<Map<string, Ollama>> {
+  // GitHub-only mode: no local Ollama servers; return empty map
+  return new Map();
+}
+
+/**
+ * Format Ollama Ps Model Expire At (GitHub only).
+ */
+export function FormatOllamaPsModelExpireAtFormat(expires_at: string): string {
+  // No-op formatter for GitHub-only mode
+  return expires_at;
 }

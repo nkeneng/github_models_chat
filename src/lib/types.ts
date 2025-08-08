@@ -3,6 +3,9 @@ export interface Preferences {
   ollamaResultViewInputFallback: boolean;
   ollamaChatHistoryMessagesNumber: string;
   ollamaCertificateValidation: string;
+  // GitHub Models preferences
+  githubToken?: string;
+  defaultModel?: string; // fallback if not set via command; default will be openai/gpt-4.1
 }
 
 export interface RaycastArgumentsOllamaCommandCustom {

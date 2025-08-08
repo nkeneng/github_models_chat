@@ -1,9 +1,6 @@
-import { getPreferenceValues, Icon, List, showToast, Toast } from "@raycast/api";
-import { Preferences, RaycastArgumentsOllamaCommandCustom } from "./lib/types";
+import { Icon, List, showToast, Toast } from "@raycast/api";
+import { RaycastArgumentsOllamaCommandCustom } from "./lib/types";
 import { AnswerView } from "./lib/ui/AnswerView/main";
-
-const p = getPreferenceValues<Preferences>();
-if (!p.ollamaCertificateValidation) process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
 const listErrorLegacyArguments: JSX.Element = (
   <List>

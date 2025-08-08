@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "raycast-ollama",
-  "title": "Ollama AI",
-  "description": "Perform Local Inference with Ollama",
+  "name": "github-models-chat",
+  "title": "GitHub Models Chat",
+  "description": "Chat with GitHub Models",
   "icon": "icon.png",
   "author": "massimiliano_pasquini",
   "categories": [
@@ -14,6 +14,21 @@
     "url": "https://github.com/MassimilianoPasquini97/raycast_ollama.git"
   },
   "preferences": [
+    {
+      "name": "githubToken",
+      "description": "GitHub API Token",
+      "type": "password",
+      "required": true,
+      "title": "GitHub Token"
+    },
+    {
+      "name": "defaultModel",
+      "description": "Fallback default model if not set via command",
+      "type": "textfield",
+      "required": false,
+      "title": "Default Model",
+      "default": "openai/gpt-4.1"
+    },
     {
       "name": "ollamaResultViewInput",
       "description": "Choose preferred input source",
@@ -60,106 +75,120 @@
   "commands": [
     {
       "name": "ollama-chat",
-      "title": "Chat with Ollama",
-      "subtitle": "Ollama",
-      "description": "Chat with Ollama",
+      "title": "Chat with GitHub Models",
+      "subtitle": "GitHub Models",
+      "description": "Chat with GitHub Models",
+      "mode": "view"
+    },
+    {
+      "name": "sync-github-models",
+      "title": "Sync GitHub Models",
+      "subtitle": "GitHub Models",
+      "description": "Fetch and cache the GitHub Models catalog",
+      "mode": "view"
+    },
+    {
+      "name": "set-default-github-model",
+      "title": "Set Default GitHub Model",
+      "subtitle": "GitHub Models",
+      "description": "Pick your default model from cached catalog",
       "mode": "view"
     },
     {
       "name": "ollama-browser-summarize",
       "title": "Summarize Website",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Summarize content from current Website.",
       "mode": "view"
     },
     {
       "name": "ollama-casual",
       "title": "Change Tone to Casual",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Make selected text more casual",
       "mode": "view"
     },
     {
       "name": "ollama-code-explain",
       "title": "Explain Code Step by Step",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Explain the selected code step by step",
       "mode": "view"
     },
     {
       "name": "ollama-confident",
       "title": "Change Tone to Confident",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Make selected text more confident",
       "mode": "view"
     },
     {
       "name": "ollama-explain",
       "title": "Explain This in Simple Terms",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Explain selected text in simple terms",
       "mode": "view"
     },
     {
       "name": "ollama-fix-spelling-grammar",
       "title": "Fix Spelling and Grammar",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Fix selected text from spelling and grammar error",
       "mode": "view"
     },
     {
       "name": "ollama-friendly",
       "title": "Change Tone to Friendly",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Make selected text more friendly",
       "mode": "view"
     },
     {
       "name": "ollama-image-describe",
       "title": "Describe Content of Image",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Describe content of the image on the clipboard or selected from finder",
       "mode": "view"
     },
     {
       "name": "ollama-image-to-text",
       "title": "Get Text from Image",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Get text from image on the clipboard or selected from finder",
       "mode": "view"
     },
     {
       "name": "ollama-improve-writing",
       "title": "Improve Writing",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Improve writing of selected text",
       "mode": "view"
     },
     {
       "name": "ollama-longer",
       "title": "Make Longer",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Make selected text longer",
       "mode": "view"
     },
     {
       "name": "ollama-professional",
       "title": "Change Tone to Professional",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Make selected text more professional",
       "mode": "view"
     },
     {
       "name": "ollama-shorter",
       "title": "Make Shorter",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Make selected text shorter",
       "mode": "view"
     },
     {
       "name": "ollama-translate",
       "title": "Translate",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Translate selected text",
       "mode": "view",
       "arguments": [
@@ -174,35 +203,35 @@
     {
       "name": "ollama-tweet",
       "title": "Rephrase as Tweet",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Rephrase selected text as Tweet",
       "mode": "view"
     },
     {
       "name": "ollama-models",
-      "title": "Manage Models",
-      "subtitle": "Ollama",
-      "description": "Manage installed models",
+      "title": "Models Catalog",
+      "subtitle": "GitHub Models",
+      "description": "Browse available GitHub models",
       "mode": "view"
     },
     {
       "name": "ollama-ps",
       "title": "Loaded Models",
-      "subtitle": "Ollama",
-      "description": "Show models loaded on ram",
+      "subtitle": "GitHub Models",
+      "description": "(Not applicable)",
       "mode": "view"
     },
     {
       "name": "ollama-custom-create",
       "title": "Create Custom Command",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Create a custom command",
       "mode": "view"
     },
     {
       "name": "ollama-custom-command",
       "title": "Custom Command",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Create a custom command using a quicklinks",
       "mode": "view",
       "arguments": [
@@ -229,7 +258,7 @@
     {
       "name": "ollama-mcp-server",
       "title": "Manage Mcp Server",
-      "subtitle": "Ollama",
+      "subtitle": "GitHub Models",
       "description": "Manage configured Mcp Server",
       "mode": "view"
     }

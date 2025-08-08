@@ -7,7 +7,6 @@ import { ValidationKeepAlive } from "./lib/ui/valitadion";
 import { InfoKeepAlive } from "./lib/ui/info";
 
 const p = getPreferenceValues<Preferences>();
-if (!p.ollamaCertificateValidation) process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0";
 
 interface FormData {
   prompt: string;
