@@ -19,14 +19,20 @@ export interface GitHubModel {
   tags?: string[]; // ["multipurpose", ...]
 }
 
+export type GitHubContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
+export type GitHubContent = string | GitHubContentPart[];
+
 export interface GitHubChatMessage {
   role: "system" | "user" | "assistant";
-  content: string;
+  content: GitHubContent;
 }
 
 export interface GitHubChatResponse {
   choices: Array<{
-    message: GitHubChatMessage;
+    message: { role: string; content: string };
   }>;
 }
 

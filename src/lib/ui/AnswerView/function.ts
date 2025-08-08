@@ -10,8 +10,16 @@ import { Creativity } from "../../enum";
 import { RaycastChat, SettingsCommandAnswer } from "../../settings/types";
 import { OllamaApiChatMessageRole } from "../../ollama/enum";
 import { RaycastImage } from "../../types";
-import { chatCompletion, GitHubChatMessage } from "../../github/api";
+import { chatCompletion, GitHubChatMessage, GitHubContentPart, listCatalog } from "../../github/api";
 import { Preferences } from "../../types";
+
+// Helper to infer MIME type from file path (fallback to image/jpeg)
+function inferMime(path?: string): string {
+  if (!path) return "image/jpeg";
+  const p = path.toLowerCase();
+  if (p.endsWith(".png")) return "image/png";
+  return "image/jpeg";
+}
 
 /**
  * Get Types.UiModel with fallback to GitHub default when settings are unavailable.
@@ -96,7 +104,7 @@ export async function convertAnswerToChat(
 }
 
 /**
- * Inference using GitHub Models chat/completions (non-streaming).
+ * Inference using GitHub Models chat/completions (non-streaming), with optional images via data URLs.
  */
 async function Inference(
   model: Types.UiModel,
@@ -104,7 +112,7 @@ async function Inference(
   setLoading: React.Dispatch<React.SetStateAction<boolean>>,
   setAnswer: React.Dispatch<React.SetStateAction<string>>,
   setAnswerMetadata: React.Dispatch<React.SetStateAction<OllamaApiGenerateResponse>>,
-  images: string[] | undefined = undefined,
+  images: RaycastImage[] | undefined = undefined,
   creativity: Creativity = Creativity.Medium,
   keep_alive?: string
 ): Promise<void> {
@@ -113,7 +121,24 @@ async function Inference(
   try {
     const prefs = getPreferenceValues<Preferences>();
     const token = prefs.githubToken || "";
-    const messages: GitHubChatMessage[] = [{ role: "user", content: prompt }];
+
+    let content: GitHubContentPart[] | string = prompt;
+    if (images && images.length > 0) {
+      const parts: GitHubContentPart[] = [{ type: "text", text: prompt }];
+      for (const img of images) {
+        const mime = inferMime(img.path);
+        parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64}` } });
+      }
+      content = parts;
+    }
+
+    const messages: GitHubChatMessage[] = [
+      {
+        role: "user",
+        content,
+      },
+    ];
+
     const resp = await chatCompletion(token, model.tag.name, messages);
     const answer = resp.choices?.[0]?.message?.content || "";
     setAnswer(answer);
@@ -152,21 +177,39 @@ export async function Run(
     });
     setImageView((prevState) => prevState + "\n");
     images.current = imgs[1];
+    // Important: use the prompt with {image} removed
+    prompt = imgs[0];
   }
 
   // Loading query
   prompt = await PromptTokenParser(prompt);
   query.current = prompt;
 
+  // If images are included, prefer a vision-capable model (from catalog)
+  let modelToUse = model;
+  if (images.current && images.current.length > 0) {
+    try {
+      const prefs = getPreferenceValues<Preferences>();
+      const token = prefs.githubToken || "";
+      const catalog = await listCatalog(token);
+      const vision = catalog.find((m) => m.supported_input_modalities?.includes("image"));
+      if (vision && vision.id && vision.id !== model.tag.name) {
+        modelToUse = { ...model, tag: { ...model.tag, name: vision.id } } as any;
+      }
+    } catch {
+      // ignore; fallback to current model
+    }
+  }
+
   // Start Inference (GitHub Models)
   setAnswer("");
   await Inference(
-    model,
+    modelToUse,
     prompt,
     setLoading,
     setAnswer,
     setAnswerMetadata,
-    imgs && imgs[1] ? imgs[1].map((i) => i.base64) : undefined,
+    images.current,
     creativity,
     keep_alive
   );
