@@ -170,9 +170,10 @@ async function GetImageFromFile(file: string): Promise<RaycastImage> {
   const buffer = fs.readFileSync(decodeURI(file));
   const fileType = await fileTypeFromBuffer(buffer);
   if (fileType && (fileType.mime === "image/jpeg" || fileType.mime === "image/png")) {
+    const src = `file://${encodeURI(file)}`;
     return {
       path: file,
-      html: `<img src="${file}" alt="image" height="180" width="auto">`,
+      html: `<img src="${src}" alt="image" width="300" style="max-width:100%;height:auto;" />\n\n`,
       base64: buffer.toString("base64"),
     };
   } else {
@@ -199,7 +200,7 @@ async function GetImageFromUrl(url: string): Promise<RaycastImage | undefined> {
     .then((buffer) => {
       return {
         path: url,
-        html: `<img src="${url}" alt="image" height="180" width="auto">`,
+        html: `<img src="${url}" alt="image" width="300" style="max-width:100%;height:auto;" />\n\n`,
         base64: Buffer.from(buffer).toString("base64"),
       } as RaycastImage;
     });
