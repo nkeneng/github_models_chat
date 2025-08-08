@@ -11,8 +11,11 @@ export default function GithubModelsView() {
         <List.Item
           key={m.id}
           title={m.name}
-          subtitle={m.summary}
-          accessories={[{ tag: m.publisher }, m.rate_limit_tier ? { tag: m.rate_limit_tier, color: Color.Blue } : {}]}
+          subtitle={[m.capabilities?.join(", "), m.tags?.join(", ")].filter(Boolean).join(" • ")}
+          accessories={[
+            { tag: m.publisher },
+            ...(m.rate_limit_tier ? [{ tag: m.rate_limit_tier, color: Color.Blue }] : []),
+          ]}
           actions={
             <ActionPanel>
               <Action.OpenInBrowser url={m.html_url} />
@@ -53,10 +56,16 @@ export default function GithubModelsView() {
                   {m.limits && (
                     <>
                       {m.limits.max_input_tokens && (
-                        <List.Item.Detail.Metadata.Label title="Max Input Tokens" text={String(m.limits.max_input_tokens)} />
+                        <List.Item.Detail.Metadata.Label
+                          title="Max Input Tokens"
+                          text={String(m.limits.max_input_tokens)}
+                        />
                       )}
                       {m.limits.max_output_tokens && (
-                        <List.Item.Detail.Metadata.Label title="Max Output Tokens" text={String(m.limits.max_output_tokens)} />
+                        <List.Item.Detail.Metadata.Label
+                          title="Max Output Tokens"
+                          text={String(m.limits.max_output_tokens)}
+                        />
                       )}
                     </>
                   )}

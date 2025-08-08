@@ -26,9 +26,10 @@ function headers() {
   } as Record<string, string>;
 }
 
-export async function listModels(): Promise<GithubModel[]> {
+export async function listModels(signal?: AbortSignal): Promise<GithubModel[]> {
   const res = await fetch("https://models.github.ai/catalog/models", {
     headers: headers(),
+    signal,
   });
   if (!res.ok) {
     throw new Error(`GitHub API returned ${res.status}`);
@@ -41,19 +42,17 @@ export interface ChatMessage {
   content: string;
 }
 
-export async function chat(model: string, messages: ChatMessage[]): Promise<string> {
+export async function chat(model: string, messages: ChatMessage[], signal?: AbortSignal): Promise<string> {
   const res = await fetch("https://models.github.ai/inference/chat/completions", {
     method: "POST",
     headers: { ...headers(), "Content-Type": "application/json" },
     body: JSON.stringify({ model, messages }),
+    signal,
   });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`GitHub API ${res.status}: ${text}`);
   }
   const data = await res.json();
-  return data.choices && data.choices[0] && data.choices[0].message
-    ? data.choices[0].message.content
-    : "";
+  return data.choices && data.choices[0] && data.choices[0].message ? data.choices[0].message.content : "";
 }
-
