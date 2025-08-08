@@ -74,6 +74,8 @@ export async function GetModels(): Promise<Map<string, UiModelDetails[]>> {
  * @param prompt.
  */
 export async function PromptTokenParser(prompt: string): Promise<string> {
+  // Coerce to string to avoid runtime errors
+  prompt = String(prompt ?? "");
   const pts = await PromptTokenSelectionParser(prompt);
   if (pts) prompt = pts;
   const pbt = await PromptTokenBrowserTabParser(prompt);
@@ -86,6 +88,7 @@ export async function PromptTokenParser(prompt: string): Promise<string> {
  * @param prompt.
  */
 export async function PromptTokenImageParser(prompt: string): Promise<[string, RaycastImage[]] | undefined> {
+  if (!prompt) return undefined;
   const r = /{[ ]*image[ ]*}/i;
   if (prompt.match(r)) {
     const images = await GetImage();
@@ -100,6 +103,7 @@ export async function PromptTokenImageParser(prompt: string): Promise<[string, R
  * @param prompt.
  */
 async function PromptTokenSelectionParser(prompt: string): Promise<string | undefined> {
+  if (!prompt) return undefined;
   const r = /{[ ]*selection[ ]*}/i;
   if (prompt.match(r)) {
     const t = await GetPromptTokenSelectionText();
@@ -112,13 +116,13 @@ async function PromptTokenSelectionParser(prompt: string): Promise<string | unde
  * Return prompt with {browser-tab} token replaced with browser tab page text.
  */
 async function PromptTokenBrowserTabParser(prompt: string): Promise<string | undefined> {
+  if (!prompt) return undefined;
   const r = /{[ ]*browser-tab[ ]*(?:[ ]+format="(html|markdown|text)"[ ]*)?}/i;
   if (prompt.match(r)) {
     if (!environment.canAccess(BrowserExtension)) throw ErrorRaycastBrowserExtantion;
     const t = prompt.match(r);
-    const o = await BrowserExtension.getContent({
-      format: `${t?.groups && t.groups[1] ? (t.groups[1] as "html" | "markdown" | "text") : "markdown"}`,
-    });
+    const format = t && t[1] ? (t[1] as "html" | "markdown" | "text") : "markdown";
+    const o = await BrowserExtension.getContent({ format });
     prompt = prompt.replace(r, o);
   }
   return prompt;

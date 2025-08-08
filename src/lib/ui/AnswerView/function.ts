@@ -1,50 +1,58 @@
 import * as Types from "./types";
 import * as React from "react";
-import { Ollama } from "../../ollama/ollama";
+// import { Ollama } from "../../ollama/ollama";
 import { OllamaApiGenerateRequestBody, OllamaApiGenerateResponse } from "../../ollama/types";
 import { CommandAnswer } from "../../settings/enum";
 import { AddSettingsCommandChat, GetOllamaServerByName, GetSettingsCommandAnswer } from "../../settings/settings";
-import { launchCommand, LaunchType, showToast, Toast } from "@raycast/api";
+import { launchCommand, LaunchType, showToast, Toast, getPreferenceValues, LocalStorage } from "@raycast/api";
 import { GetAvailableModel, PromptTokenImageParser, PromptTokenParser } from "../function";
 import { Creativity } from "../../enum";
 import { RaycastChat, SettingsCommandAnswer } from "../../settings/types";
 import { OllamaApiChatMessageRole } from "../../ollama/enum";
 import { RaycastImage } from "../../types";
+import { chatCompletion, GitHubChatMessage } from "../../github/api";
+import { Preferences } from "../../types";
 
 /**
- * Get Types.UiModel.
- * @param command - Command Type.
- * @param server - Ollama Server Name.
- * @param model - Ollama Model Tag Name.
- * @param Types.UiModel.
+ * Get Types.UiModel with fallback to GitHub default when settings are unavailable.
  */
 export async function GetModel(command?: CommandAnswer, server?: string, model?: string): Promise<Types.UiModel> {
   let settings: SettingsCommandAnswer | undefined;
+  let resolvedServer = server;
+  let resolvedModel = model;
   if (command) {
-    settings = await GetSettingsCommandAnswer(command);
-    server = settings.server;
-    model = settings.model.main.tag;
-  } else if (!server || !model) throw new Error("server and model need to be defined");
-  const s = await GetOllamaServerByName(server);
-  const m = (await GetAvailableModel(server)).filter((m) => m.name === model);
-  if (m.length < 1) throw new Error("Model unavailable on given server");
+    try {
+      settings = await GetSettingsCommandAnswer(command);
+      resolvedServer = settings.server;
+      resolvedModel = settings.model.main.tag;
+    } catch {
+      // Fallback: GitHub default
+      resolvedServer = "GitHub";
+      const prefs = getPreferenceValues<Preferences>();
+      const cached = await LocalStorage.getItem<string>("github_default_model");
+      resolvedModel = cached || prefs.defaultModel || "openai/gpt-4.1";
+    }
+  }
+  if (!resolvedServer || !resolvedModel) throw new Error("server and model need to be defined");
+
+  // Build a minimal UiModel using available models list
+  const s = await GetOllamaServerByName(resolvedServer);
+  const available = await GetAvailableModel(resolvedServer);
+  const match = available.find((m) => m.name === resolvedModel);
+  if (!match) throw new Error("Model unavailable on given server");
   return {
     server: {
-      name: server,
-      ollama: new Ollama(s),
+      name: resolvedServer,
+      // placeholder; AnswerView inference uses GitHub chat client instead
+      ollama: undefined as any,
     },
-    tag: m[0],
+    tag: match,
     keep_alive: settings?.model.main.keep_alive,
   };
 }
 
 /**
  * Convert answer into chat for continue conversation on "Chat with Ollama" command.
- * @param model
- * @param query
- * @param answer
- * @param answerMeta
- * @param openCommand? - `false` for avoiding open "Chat with Ollama" command.
  */
 export async function convertAnswerToChat(
   model: Types.UiModel,
@@ -88,7 +96,7 @@ export async function convertAnswerToChat(
 }
 
 /**
- * Start Inference with Ollama API.
+ * Inference using GitHub Models chat/completions (non-streaming).
  */
 async function Inference(
   model: Types.UiModel,
@@ -101,32 +109,20 @@ async function Inference(
   keep_alive?: string
 ): Promise<void> {
   await showToast({ style: Toast.Style.Animated, title: "🧠 Inference." });
-  const body: OllamaApiGenerateRequestBody = {
-    model: model.tag.name,
-    prompt: prompt,
-    images: images,
-    options: {
-      temperature: creativity,
-    },
-  };
-  if (keep_alive) body.keep_alive = keep_alive;
-  model.server.ollama
-    .OllamaApiGenerate(body)
-    .then(async (emiter) => {
-      emiter.on("data", (data) => {
-        setAnswer((prevState) => prevState + data);
-      });
 
-      emiter.on("done", async (data) => {
-        await showToast({ style: Toast.Style.Success, title: "🧠 Inference Done." });
-        setAnswerMetadata(data);
-        setLoading(false);
-      });
-    })
-    .catch(async (err) => {
-      await showToast({ style: Toast.Style.Failure, title: err });
-      setLoading(false);
-    });
+  try {
+    const prefs = getPreferenceValues<Preferences>();
+    const token = prefs.githubToken || "";
+    const messages: GitHubChatMessage[] = [{ role: "user", content: prompt }];
+    const resp = await chatCompletion(token, model.tag.name, messages);
+    const answer = resp.choices?.[0]?.message?.content || "";
+    setAnswer(answer);
+    await showToast({ style: Toast.Style.Success, title: "🧠 Inference Done." });
+  } catch (err: any) {
+    await showToast({ style: Toast.Style.Failure, title: "Error", message: String(err?.message || err) });
+  } finally {
+    setLoading(false);
+  }
 }
 
 /**
@@ -162,7 +158,7 @@ export async function Run(
   prompt = await PromptTokenParser(prompt);
   query.current = prompt;
 
-  // Start Inference
+  // Start Inference (GitHub Models)
   setAnswer("");
   await Inference(
     model,
