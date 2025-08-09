@@ -40,8 +40,10 @@ export function AnswerView(props: props): JSX.Element {
     },
   });
   const [loading, setLoading]: [boolean, React.Dispatch<React.SetStateAction<boolean>>] = React.useState(false);
-  const query: React.MutableRefObject<undefined | string> = React.useRef();
-  const images: React.MutableRefObject<undefined | RaycastImage[]> = React.useRef();
+  const query: React.MutableRefObject<undefined | string> = React.useRef<string | undefined>(undefined);
+  const images: React.MutableRefObject<undefined | RaycastImage[]> = React.useRef<RaycastImage[] | undefined>(
+    undefined
+  );
   const [imageView, setImageView]: [string, React.Dispatch<React.SetStateAction<string>>] = React.useState("");
   const [answer, setAnswer]: [string, React.Dispatch<React.SetStateAction<string>>] = React.useState("");
   const [answerMetadata, setAnswerMetadata]: [
