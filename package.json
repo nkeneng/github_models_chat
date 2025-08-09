@@ -4,14 +4,14 @@
   "title": "GitHub Models Chat",
   "description": "Chat with GitHub Models",
   "icon": "icon.png",
-  "author": "massimiliano_pasquini",
+  "author": "StevenNkeneng",
   "categories": [
     "Productivity"
   ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/MassimilianoPasquini97/raycast_ollama.git"
+    "url": "https://github.com/nkeneng/github_models_chat.git"
   },
   "preferences": [
     {
