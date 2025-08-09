@@ -3,7 +3,7 @@ import { Document } from "langchain/document";
 import * as React from "react";
 import { OllamaApiChatMessageRole } from "../../ollama/enum";
 import { OllamaApiChatMessage, OllamaApiTagsResponseModel } from "../../ollama/types";
-import { AddSettingsCommandChat, GetSettingsCommandChatByIndex } from "../../settings/settings";
+import { AddSettingsCommandChat, GetSettingsCommandChatByIndex, SetSettingsCommandChatByIndex } from "../../settings/settings";
 import { RaycastChat } from "../../settings/types";
 import { Preferences, RaycastImage } from "../../types";
 import { GetAvailableModel, PromptTokenParser } from "../function";
@@ -44,6 +44,22 @@ export async function ChangeChat(
     return;
   });
   if (!c) return;
+
+  // If this chat has no messages yet, align its main model with the current default
+  try {
+    if (!c.messages || c.messages.length === 0) {
+      const prefs = getPreferenceValues<Preferences>();
+      const cached = await LocalStorage.getItem<string>("github_default_model");
+      const desired = cached || prefs.defaultModel || "openai/gpt-4.1";
+      if (desired && c.models?.main?.tag !== desired) {
+        c.models.main.tag = desired;
+        await SetSettingsCommandChatByIndex(i, c);
+      }
+    }
+  } catch {
+    // ignore alignment errors
+  }
+
   const vi = await VerifyChatModelInstalled(
     c.models.main.server_name,
     c.models.main.tag,
@@ -98,9 +114,18 @@ export async function NewChat(
   setChatNameIndex: React.Dispatch<React.SetStateAction<number>>,
   revalidate: () => Promise<string[]>
 ): Promise<void> {
+  const prefs = getPreferenceValues<Preferences>();
+  const cached = await LocalStorage.getItem<string>("github_default_model");
+  const desired = cached || prefs.defaultModel || "openai/gpt-4.1";
   const cn: RaycastChat = {
     name: "New Chat",
-    models: chat.models,
+    models: {
+      main: {
+        server_name: "GitHub",
+        server: { url: "https://models.github.ai" },
+        tag: desired,
+      } as any,
+    },
     messages: [],
   };
   await AddSettingsCommandChat(cn);
@@ -186,18 +211,36 @@ async function Inference(
   const prefs = getPreferenceValues<Preferences>();
   const token = prefs.githubToken || "";
 
-  let model = chat.models.main;
-  if (image && chat.models.vision) model = chat.models.vision;
+  // Determine which model to use, honoring the current default for non-image prompts
+  const cachedDefault = await LocalStorage.getItem<string>("github_default_model");
+  const desiredDefault = cachedDefault || prefs.defaultModel || "openai/gpt-4.1";
+
+  let usedMain = true;
+  let model = { ...chat.models.main } as any;
+  if (image && chat.models.vision) {
+    usedMain = false;
+    model = { ...chat.models.vision } as any;
+  }
   // If images are present but no dedicated vision model configured, try a vision-capable model from catalog
   if (image && (!chat.models.vision || !chat.models.vision.tag)) {
     try {
       const catalog = await listCatalog(token);
       const vision = catalog.find((m) => m.supported_input_modalities?.includes("image"));
-      if (vision) model = { ...model, tag: vision.id } as any;
+      if (vision) {
+        usedMain = false;
+        model = { ...model, tag: vision.id } as any;
+      }
     } catch {
       // ignore and keep current model
     }
   }
+  // Apply default only for non-image prompts (i.e., when using main model)
+  if (!image || image.length === 0) {
+    model = { ...model, tag: desiredDefault };
+    usedMain = true;
+  }
+  const usedTag = (model as any).tag;
+  console.log("Using Model:", usedTag);
 
   const messagesGh: GitHubChatMessage[] = [];
   // previous chat history (content only)
@@ -222,20 +265,26 @@ async function Inference(
   const ml = chat.messages.length;
 
   try {
-    const resp = await chatCompletion(token, model.tag, messagesGh);
+    const resp = await chatCompletion(token, usedTag, messagesGh);
     const answer = resp.choices?.[0]?.message?.content || "";
 
-    // append new message
+    // append new message and persist model change for ongoing chat when applicable
     setChat((prevState) => {
       if (prevState) {
         if (prevState.messages.length === ml) {
+          const nextModels = usedMain
+            ? { ...prevState.models, main: { ...prevState.models.main, tag: usedTag } }
+            : prevState.models;
           return {
             ...prevState,
+            models: nextModels,
             messages: prevState.messages.concat({
-              model: model.tag,
+              model: usedTag,
               created_at: new Date().toISOString(),
               images: image,
-              files: documents && documents.map((d) => (d as any).metadata?.source).filter((v, i, a) => a.indexOf(v) === i),
+              files:
+                documents &&
+                documents.map((d) => (d as any).metadata?.source).filter((v, i, a) => a.indexOf(v) === i),
               messages: [
                 { role: OllamaApiChatMessageRole.USER, content: query },
                 { role: OllamaApiChatMessageRole.ASSISTANT, content: answer },
