@@ -356,6 +356,7 @@ export function ChatView(): JSX.Element {
 
   return (
     <List
+      navigationTitle={Chat && isMcpEnabled(Chat) ? "Chat with GitHub Models  🛠 MCP" : "Chat with GitHub Models"}
       isLoading={IsLoading || IsLoadingChatNames}
       searchBarPlaceholder="Ask..."
       searchText={Query}
@@ -386,6 +387,7 @@ export function ChatView(): JSX.Element {
             title={item.messages[0].content}
             key={index}
             id={index.toString()}
+            accessories={isMcpEnabled(Chat) ? [{ icon: Icon.WrenchScrewdriver, tooltip: "MCP Tools Enabled" }] : []}
             actions={<ActionMessage message={item} />}
             detail={
               <List.Item.Detail
