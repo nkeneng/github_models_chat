@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Action, ActionPanel, Color, Icon, List, open } from "@raycast/api";
+import { Action, ActionPanel, Color, Icon, List, open, LocalStorage, showToast, Toast } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { GetModels } from "../function";
 
@@ -53,6 +53,14 @@ export function ModelView(): JSX.Element {
                   title="Open Docs"
                   icon={Icon.Globe}
                   onAction={() => m.url && open(m.url)}
+                />
+                <Action
+                  title="Set as Default Model"
+                  icon={Icon.Star}
+                  onAction={async () => {
+                    await LocalStorage.setItem("github_default_model", m.name);
+                    await showToast({ style: Toast.Style.Success, title: "Default model set", message: m.name });
+                  }}
                 />
                 <Action
                   title={showDetail ? "Hide Detail" : "Show Detail"}

@@ -88,13 +88,6 @@
       "mode": "view"
     },
     {
-      "name": "set-default-github-model",
-      "title": "Set Default GitHub Model",
-      "subtitle": "GitHub Models",
-      "description": "Pick your default model from cached catalog",
-      "mode": "view"
-    },
-    {
       "name": "ollama-browser-summarize",
       "title": "Summarize Website",
       "subtitle": "GitHub Models",
