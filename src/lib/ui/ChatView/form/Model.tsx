@@ -77,10 +77,20 @@ export function FormModel(props: props): JSX.Element {
   }
 
   return (
-    <Form actions={<ActionPanel><Action.SubmitForm onSubmit={handleSubmit} /><Action title="Close" icon={Icon.Xmark} onAction={() => props.SetShow(false)} /></ActionPanel>} isLoading={IsLoadingModel}>
+    <Form
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm onSubmit={handleSubmit} />
+          <Action title="Close" icon={Icon.Xmark} onAction={() => props.SetShow(false)} />
+        </ActionPanel>
+      }
+      isLoading={IsLoadingModel}
+    >
       {!IsLoadingModel && Model && (
         <Form.Dropdown title="Model" {...itemProps.modelMain}>
-          {Model.get("GitHub")?.map((s) => <Form.Dropdown.Item title={s.name} value={s.name} key={s.name} />)}
+          {Model.get("GitHub")?.map((s) => (
+            <Form.Dropdown.Item title={s.name} value={s.name} key={s.name} />
+          ))}
         </Form.Dropdown>
       )}
     </Form>

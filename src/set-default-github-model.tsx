@@ -41,7 +41,9 @@ export default function Command() {
           }
         />
       ))}
-      {!loading && models.length === 0 && <List.EmptyView icon={Icon.Xmark} title="No cached models" description="Run Sync GitHub Models first" />}
+      {!loading && models.length === 0 && (
+        <List.EmptyView icon={Icon.Xmark} title="No cached models" description="Run Sync GitHub Models first" />
+      )}
     </List>
   );
 }

@@ -3,7 +3,11 @@ import { Document } from "langchain/document";
 import * as React from "react";
 import { OllamaApiChatMessageRole } from "../../ollama/enum";
 import { OllamaApiChatMessage, OllamaApiTagsResponseModel } from "../../ollama/types";
-import { AddSettingsCommandChat, GetSettingsCommandChatByIndex, SetSettingsCommandChatByIndex } from "../../settings/settings";
+import {
+  AddSettingsCommandChat,
+  GetSettingsCommandChatByIndex,
+  SetSettingsCommandChatByIndex,
+} from "../../settings/settings";
 import { RaycastChat } from "../../settings/types";
 import { Preferences, RaycastImage } from "../../types";
 import { GetAvailableModel, PromptTokenParser } from "../function";
@@ -12,9 +16,7 @@ import { McpClientMultiServer } from "../../mcp/mcp";
 import { PromptContext } from "./type";
 import { chatCompletion, GitHubChatMessage, GitHubContentPart, listCatalog, GitHubTool } from "../../github/api";
 import "../../polyfill/node-fetch";
-import {
-  environment,
-} from "@raycast/api";
+import { environment } from "@raycast/api";
 
 // Simple debug logger
 const DBG = (...args: any[]) => console.log(`[Chat][Inference]`, new Date().toISOString(), ...args);
@@ -355,8 +357,7 @@ async function Inference(
             created_at: new Date().toISOString(),
             images: image,
             files:
-              documents &&
-              documents.map((d) => (d as any).metadata?.source).filter((v, i, a) => a.indexOf(v) === i),
+              documents && documents.map((d) => (d as any).metadata?.source).filter((v, i, a) => a.indexOf(v) === i),
             messages: [
               { role: OllamaApiChatMessageRole.USER, content: query },
               { role: OllamaApiChatMessageRole.ASSISTANT, content: answer },

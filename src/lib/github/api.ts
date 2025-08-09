@@ -19,9 +19,7 @@ export interface GitHubModel {
   tags?: string[]; // ["multipurpose", ...]
 }
 
-export type GitHubContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+export type GitHubContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
 export type GitHubContent = string | GitHubContentPart[];
 

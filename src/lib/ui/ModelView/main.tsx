@@ -7,7 +7,12 @@ export function ModelView(): JSX.Element {
   const { data: Models, isLoading } = usePromise(GetModels);
   const [showDetail, setShowDetail] = React.useState(true);
 
-  function ModelDetail(m: { name: string; summary?: string; url?: string; meta?: Record<string, string | number | string[]> }): JSX.Element {
+  function ModelDetail(m: {
+    name: string;
+    summary?: string;
+    url?: string;
+    meta?: Record<string, string | number | string[]>;
+  }): JSX.Element {
     const meta = m.meta || {};
     return (
       <List.Item.Detail
@@ -49,11 +54,7 @@ export function ModelView(): JSX.Element {
             detail={<ModelDetail name={m.name} summary={m.summary} url={m.url} meta={m.meta} />}
             actions={
               <ActionPanel>
-                <Action
-                  title="Open Docs"
-                  icon={Icon.Globe}
-                  onAction={() => m.url && open(m.url)}
-                />
+                <Action title="Open Docs" icon={Icon.Globe} onAction={() => m.url && open(m.url)} />
                 <Action
                   title="Set as Default Model"
                   icon={Icon.Star}
@@ -72,7 +73,11 @@ export function ModelView(): JSX.Element {
           />
         ))}
       {!isLoading && Models && (!Models.get("GitHub") || Models.get("GitHub")!.length === 0) && (
-        <List.EmptyView icon={Icon.Xmark} title="No Models Found" description="Run Sync GitHub Models or check token." />
+        <List.EmptyView
+          icon={Icon.Xmark}
+          title="No Models Found"
+          description="Run Sync GitHub Models or check token."
+        />
       )}
     </List>
   );

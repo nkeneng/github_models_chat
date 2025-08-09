@@ -203,14 +203,5 @@ export async function Run(
 
   // Start Inference (GitHub Models)
   setAnswer("");
-  await Inference(
-    modelToUse,
-    prompt,
-    setLoading,
-    setAnswer,
-    setAnswerMetadata,
-    images.current,
-    creativity,
-    keep_alive
-  );
+  await Inference(modelToUse, prompt, setLoading, setAnswer, setAnswerMetadata, images.current, creativity, keep_alive);
 }

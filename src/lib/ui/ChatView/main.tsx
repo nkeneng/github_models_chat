@@ -211,7 +211,7 @@ export function ChatView(): JSX.Element {
               shortcut={{ modifiers: ["cmd"], key: "b" }}
             />
             <Action
-              title="Image From Clipboard"
+              title="Image from Clipboard"
               icon={Icon.Image}
               onAction={async () =>
                 GetImage()
@@ -244,14 +244,14 @@ export function ChatView(): JSX.Element {
           )}
           {Chat && ModelSupportsTools && (
             <Action
-              title={isMcpEnabled(Chat) ? "Disable MCP Tools" : "Enable MCP Tools"}
+              title={isMcpEnabled(Chat) ? "Disable Mcp Tools" : "Enable Mcp Tools"}
               icon={isMcpEnabled(Chat) ? Icon.EyeDisabled : Icon.Eye}
               onAction={() => SetChat((prev) => (prev ? setMcpEnabled(prev, !isMcpEnabled(prev)) : prev))}
             />
           )}
           {Chat && !ModelSupportsTools && (
             <Action
-              title="Model does not support tools"
+              title="Model Does Not Support Tools"
               icon={Icon.Info}
               onAction={() => showToast({ style: Toast.Style.Failure, title: "Change to a tool-capable model" })}
             />
@@ -391,7 +391,9 @@ export function ChatView(): JSX.Element {
             actions={<ActionMessage message={item} />}
             detail={
               <List.Item.Detail
-                markdown={`${item.images ? `${item.images.map((i) => i.html).join("")}\n` : ""}${item.messages[1].content}`}
+                markdown={`${item.images ? `${item.images.map((i) => i.html).join("")}\n` : ""}${
+                  item.messages[1].content
+                }`}
                 metadata={item.done && ShowAnswerMetadata && <DetailMetadataMessage message={item} />}
               />
             }

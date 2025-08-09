@@ -12,9 +12,7 @@ function getGitHubServer(): OllamaServer {
   const prefs = getPreferenceValues<Preferences>();
   return {
     url: "https://models.github.ai",
-    auth: prefs.githubToken
-      ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken }
-      : undefined,
+    auth: prefs.githubToken ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken } : undefined,
   };
 }
 
@@ -70,7 +68,9 @@ export async function DeleteOllamaServers(name: string): Promise<void> {
 /**
  * Get Settings for Command Answer from LocalStorage. (unchanged)
  */
-export async function GetSettingsCommandAnswer(command: SettingsEnum.CommandAnswer): Promise<Types.SettingsCommandAnswer> {
+export async function GetSettingsCommandAnswer(
+  command: SettingsEnum.CommandAnswer
+): Promise<Types.SettingsCommandAnswer> {
   const j = await LocalStorage.getItem(`settings_command_${command}`);
   if (j) return JSON.parse(j as string);
   throw new Error("Settings for this Command unavailable");
@@ -146,20 +146,35 @@ async function GetLegacySettingsCommandChat(): Promise<Types.RaycastChat[]> {
         models: {
           main: {
             server_name: "GitHub",
-            server: { url: "https://models.github.ai", auth: prefs.githubToken ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken } : undefined },
+            server: {
+              url: "https://models.github.ai",
+              auth: prefs.githubToken
+                ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken }
+                : undefined,
+            },
             tag: String(jm),
           },
           embedding: je
             ? {
                 server_name: "GitHub",
-                server: { url: "https://models.github.ai", auth: prefs.githubToken ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken } : undefined },
+                server: {
+                  url: "https://models.github.ai",
+                  auth: prefs.githubToken
+                    ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken }
+                    : undefined,
+                },
                 tag: String(je),
               }
             : undefined,
           vision: ji
             ? {
                 server_name: "GitHub",
-                server: { url: "https://models.github.ai", auth: prefs.githubToken ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken } : undefined },
+                server: {
+                  url: "https://models.github.ai",
+                  auth: prefs.githubToken
+                    ? { mode: OllamaServerAuthorizationMethod.BEARER, token: prefs.githubToken }
+                    : undefined,
+                },
                 tag: String(ji),
               }
             : undefined,
