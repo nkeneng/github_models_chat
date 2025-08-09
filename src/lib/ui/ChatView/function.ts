@@ -10,8 +10,16 @@ import { GetAvailableModel, PromptTokenParser } from "../function";
 import { McpServerConfig, McpToolInfo } from "../../mcp/types";
 import { McpClientMultiServer } from "../../mcp/mcp";
 import { PromptContext } from "./type";
-import { chatCompletion, GitHubChatMessage } from "../../github/api";
+import { chatCompletion, GitHubChatMessage, GitHubContentPart, listCatalog } from "../../github/api";
 import "../../polyfill/node-fetch";
+
+// Helper to infer MIME type from file path (fallback to image/jpeg)
+function inferMime(path?: string): string {
+  if (!path) return "image/jpeg";
+  const p = path.toLowerCase();
+  if (p.endsWith(".png")) return "image/png";
+  return "image/jpeg";
+}
 
 const preferences = getPreferenceValues<Preferences>();
 
@@ -175,23 +183,43 @@ async function Inference(
 ): Promise<void> {
   await showToast({ style: Toast.Style.Animated, title: "🧠 Inference..." });
 
+  const prefs = getPreferenceValues<Preferences>();
+  const token = prefs.githubToken || "";
+
   let model = chat.models.main;
   if (image && chat.models.vision) model = chat.models.vision;
+  // If images are present but no dedicated vision model configured, try a vision-capable model from catalog
+  if (image && (!chat.models.vision || !chat.models.vision.tag)) {
+    try {
+      const catalog = await listCatalog(token);
+      const vision = catalog.find((m) => m.supported_input_modalities?.includes("image"));
+      if (vision) model = { ...model, tag: vision.id } as any;
+    } catch {
+      // ignore and keep current model
+    }
+  }
 
   const messagesGh: GitHubChatMessage[] = [];
-  // previous chat history
+  // previous chat history (content only)
   chat.messages
     .slice(chat.messages.length - Number(preferences.ollamaChatHistoryMessagesNumber))
     .forEach((v) => v.messages.forEach((m) => messagesGh.push({ role: m.role, content: m.content })));
 
-  // user message (with context already embedded in content by GetMessagesForInference)
+  // user message (with optional context and images)
   const latest = GetMessagesForInference(chat, query, image, context);
   const last = latest[latest.length - 1];
-  messagesGh.push({ role: last.role, content: last.content });
+  let userContent: string | GitHubContentPart[] = last.content;
+  if (image && image.length > 0) {
+    const parts: GitHubContentPart[] = [{ type: "text", text: last.content }];
+    for (const img of image) {
+      const mime = inferMime(img.path);
+      parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64}` } });
+    }
+    userContent = parts;
+  }
+  messagesGh.push({ role: last.role, content: userContent });
 
   const ml = chat.messages.length;
-  const prefs = getPreferenceValues<Preferences>();
-  const token = prefs.githubToken || "";
 
   try {
     const resp = await chatCompletion(token, model.tag, messagesGh);
