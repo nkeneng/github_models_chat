@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Action, ActionPanel, Detail, Icon, List, showToast, Toast } from "@raycast/api";
+import { Action, ActionPanel, Detail, Icon, List, showToast, Toast, getPreferenceValues } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import {
   DeleteSettingsCommandChatByIndex,
@@ -7,13 +7,14 @@ import {
   SetSettingsCommandChatByIndex,
 } from "../../settings/settings";
 import { RaycastChat, RaycastChatMessage } from "../../settings/types";
-import { ChangeChat, ClipboardConversation, NewChat, Run } from "./function";
+import { ChangeChat, ClipboardConversation, NewChat, Run, isMcpEnabled, setMcpEnabled } from "./function";
 import { FormModel } from "./form/Model";
 import { FormRenameChat } from "./form/RenameChat";
 import { GetImage } from "../function";
 import { RaycastImage } from "../../types";
 import { Document } from "langchain/document";
 import { FormAttachFile } from "./form/AttachFile";
+import { listCatalog } from "../../github/api";
 
 /**
  * Return JSX element for chat view.
@@ -36,6 +37,9 @@ export function ChatView(): JSX.Element {
   const [IsLoading, SetIsLoading]: [boolean, React.Dispatch<React.SetStateAction<boolean>>] = React.useState(false);
   const [Query, SetQuery]: [string, React.Dispatch<React.SetStateAction<string>>] = React.useState("");
   const [ShowAnswerMetadata, SetShowAnswerMetadata] = React.useState(false);
+
+  // Whether the current model supports tool-calling (for MCP)
+  const [ModelSupportsTools, SetModelSupportsTools] = React.useState<boolean>(true);
 
   const [Image, SetImage]: [
     RaycastImage[] | undefined,
@@ -81,6 +85,32 @@ export function ChatView(): JSX.Element {
       SetChatIndex(Chat.messages.length - 1);
     }
   }, [ChatIndex, Chat]);
+
+  // Re-evaluate whether current model supports tool-calling (MCP)
+  React.useEffect(() => {
+    const check = async () => {
+      if (!Chat) return;
+      try {
+        const prefs = getPreferenceValues<{ githubToken?: string }>();
+        const token = prefs.githubToken || "";
+        if (!token) {
+          SetModelSupportsTools(true);
+          return;
+        }
+        const catalog = await listCatalog(token);
+        const tags = [Chat.models?.main?.tag, Chat.models?.vision?.tag].filter(Boolean) as string[];
+        const support = tags.some((t) => {
+          const m = catalog.find((mm) => mm.id === t);
+          // Assume tool-capable when capability information is missing
+          return m?.capabilities ? m.capabilities.includes("tool-calling") : true;
+        });
+        SetModelSupportsTools(support);
+      } catch {
+        SetModelSupportsTools(true);
+      }
+    };
+    check();
+  }, [Chat]);
 
   // Form: RenameChat
   const [showFormRanameChat, setShowFormRenameChat]: [boolean, React.Dispatch<React.SetStateAction<boolean>>] =
@@ -210,6 +240,20 @@ export function ChatView(): JSX.Element {
               icon={Icon.Box}
               onAction={() => setShowFormModel(true)}
               shortcut={{ modifiers: ["cmd"], key: "m" }}
+            />
+          )}
+          {Chat && ModelSupportsTools && (
+            <Action
+              title={isMcpEnabled(Chat) ? "Disable MCP Tools" : "Enable MCP Tools"}
+              icon={isMcpEnabled(Chat) ? Icon.EyeDisabled : Icon.Eye}
+              onAction={() => SetChat((prev) => (prev ? setMcpEnabled(prev, !isMcpEnabled(prev)) : prev))}
+            />
+          )}
+          {Chat && !ModelSupportsTools && (
+            <Action
+              title="Model does not support tools"
+              icon={Icon.Info}
+              onAction={() => showToast({ style: Toast.Style.Failure, title: "Change to a tool-capable model" })}
             />
           )}
           {props.message && (

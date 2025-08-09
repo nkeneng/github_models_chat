@@ -30,9 +30,31 @@ export interface GitHubChatMessage {
   content: GitHubContent;
 }
 
+export interface GitHubToolFunction {
+  name: string;
+  description?: string;
+  parameters?: any; // JSON schema
+}
+
+export interface GitHubTool {
+  type: "function";
+  function: GitHubToolFunction;
+}
+
+export interface GitHubToolCall {
+  type: "function";
+  function: { name: string; arguments: string };
+}
+
+export interface GitHubChatResponseMessage {
+  role: string;
+  content: string;
+  tool_calls?: GitHubToolCall[];
+}
+
 export interface GitHubChatResponse {
   choices: Array<{
-    message: { role: string; content: string };
+    message: GitHubChatResponseMessage;
   }>;
 }
 
@@ -59,12 +81,16 @@ export async function listCatalog(token: string): Promise<GitHubModel[]> {
 export async function chatCompletion(
   token: string,
   model: string,
-  messages: GitHubChatMessage[]
+  messages: GitHubChatMessage[],
+  options?: { tools?: GitHubTool[]; tool_choice?: "auto" | "none" }
 ): Promise<GitHubChatResponse> {
+  const body: any = { model, messages };
+  if (options?.tools && options.tools.length > 0) body.tools = options.tools;
+  if (options?.tool_choice) body.tool_choice = options.tool_choice;
   const res = await fetch("https://models.github.ai/inference/chat/completions", {
     method: "POST",
     headers: { ...ghHeaders(token), "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const text = await res.text();

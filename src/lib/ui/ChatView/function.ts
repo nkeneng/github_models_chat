@@ -7,11 +7,14 @@ import { AddSettingsCommandChat, GetSettingsCommandChatByIndex, SetSettingsComma
 import { RaycastChat } from "../../settings/types";
 import { Preferences, RaycastImage } from "../../types";
 import { GetAvailableModel, PromptTokenParser } from "../function";
-import { McpServerConfig, McpToolInfo } from "../../mcp/types";
+import { McpServerConfig } from "../../mcp/types";
 import { McpClientMultiServer } from "../../mcp/mcp";
 import { PromptContext } from "./type";
-import { chatCompletion, GitHubChatMessage, GitHubContentPart, listCatalog } from "../../github/api";
+import { chatCompletion, GitHubChatMessage, GitHubContentPart, listCatalog, GitHubTool } from "../../github/api";
 import "../../polyfill/node-fetch";
+
+// Simple debug logger
+const DBG = (...args: any[]) => console.log(`[Chat][Inference]`, new Date().toISOString(), ...args);
 
 // Helper to infer MIME type from file path (fallback to image/jpeg)
 function inferMime(path?: string): string {
@@ -189,9 +192,34 @@ function GetMessagesForInference(
  */
 async function InitMcpClient(): Promise<void> {
   const mcpServerConfigRaw = await LocalStorage.getItem<string>("mcp_server_config");
-  if (!mcpServerConfigRaw) throw "Mcp Servers are not configured";
+  if (!mcpServerConfigRaw) {
+    DBG("MCP config not found; tools disabled");
+    throw "Mcp Servers are not configured";
+  }
   const mcpServerConfig: McpServerConfig = JSON.parse(mcpServerConfigRaw);
+  DBG("Initializing MCP client for servers:", Object.keys(mcpServerConfig.mcpServers));
   McpClient = new McpClientMultiServer(mcpServerConfig);
+}
+
+/** Enable/disable MCP for a chat */
+export function isMcpEnabled(chat: RaycastChat | undefined): boolean {
+  return Boolean((chat as any)?.mcp_enabled);
+}
+export function setMcpEnabled(chat: RaycastChat, enabled: boolean): RaycastChat {
+  return { ...chat, mcp_enabled: enabled } as any;
+}
+
+async function buildMcpTools(): Promise<GitHubTool[]> {
+  const mcpServerConfigRaw = await LocalStorage.getItem<string>("mcp_server_config");
+  if (!mcpServerConfigRaw) {
+    DBG("buildMcpTools: no MCP config present");
+    return [];
+  }
+  if (!McpClient) await InitMcpClient();
+  DBG("Fetching MCP tools (cached)");
+  const ollamaTools = await McpClient.GetToolsOllama(true);
+  DBG("MCP tools fetched:", Array.isArray(ollamaTools) ? ollamaTools.length : 0);
+  return ollamaTools as unknown as GitHubTool[];
 }
 
 /**
@@ -206,10 +234,16 @@ async function Inference(
   setChat: React.Dispatch<React.SetStateAction<RaycastChat | undefined>>,
   setLoading: React.Dispatch<React.SetStateAction<boolean>>
 ): Promise<void> {
+  DBG("Inference start", {
+    hasImage: Boolean(image && image.length > 0),
+    docs: documents?.length || 0,
+    mcpEnabled: isMcpEnabled(chat),
+  });
   await showToast({ style: Toast.Style.Animated, title: "🧠 Inference..." });
 
   const prefs = getPreferenceValues<Preferences>();
   const token = prefs.githubToken || "";
+  if (!token) DBG("Warning: GitHub token not set; requests will fail");
 
   // Determine which model to use, honoring the current default for non-image prompts
   const cachedDefault = await LocalStorage.getItem<string>("github_default_model");
@@ -221,7 +255,6 @@ async function Inference(
     usedMain = false;
     model = { ...chat.models.vision } as any;
   }
-  // If images are present but no dedicated vision model configured, try a vision-capable model from catalog
   if (image && (!chat.models.vision || !chat.models.vision.tag)) {
     try {
       const catalog = await listCatalog(token);
@@ -230,25 +263,24 @@ async function Inference(
         usedMain = false;
         model = { ...model, tag: vision.id } as any;
       }
-    } catch {
-      // ignore and keep current model
+    } catch (e) {
+      DBG("Vision fallback: catalog fetch failed", String(e));
     }
   }
-  // Apply default only for non-image prompts (i.e., when using main model)
   if (!image || image.length === 0) {
     model = { ...model, tag: desiredDefault };
     usedMain = true;
   }
   const usedTag = (model as any).tag;
-  console.log("Using Model:", usedTag);
+  DBG("Selected model", { usedTag, usedMain });
 
   const messagesGh: GitHubChatMessage[] = [];
-  // previous chat history (content only)
+  const historyCount = chat.messages.length;
   chat.messages
     .slice(chat.messages.length - Number(preferences.ollamaChatHistoryMessagesNumber))
     .forEach((v) => v.messages.forEach((m) => messagesGh.push({ role: m.role, content: m.content })));
+  DBG("History sliced", { totalHistory: historyCount, usedHistory: messagesGh.length });
 
-  // user message (with optional context and images)
   const latest = GetMessagesForInference(chat, query, image, context);
   const last = latest[latest.length - 1];
   let userContent: string | GitHubContentPart[] = last.content;
@@ -256,49 +288,126 @@ async function Inference(
     const parts: GitHubContentPart[] = [{ type: "text", text: last.content }];
     for (const img of image) {
       const mime = inferMime(img.path);
-      parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64}` } });
+      parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64.substring(0, 16)}...` } });
     }
     userContent = parts;
+    DBG("User content includes images", { count: image.length });
   }
   messagesGh.push({ role: last.role, content: userContent });
+  DBG("Prepared request", { messagesCount: messagesGh.length });
+
+  // Build tools if MCP is enabled and model likely supports tool-calling
+  let tools: GitHubTool[] | undefined;
+  if (isMcpEnabled(chat)) {
+    try {
+      tools = await buildMcpTools();
+      DBG("Tools enabled", { count: tools?.length || 0 });
+    } catch (e) {
+      DBG("Error building MCP tools", String(e));
+    }
+  } else {
+    DBG("Tools disabled for this chat");
+  }
 
   const ml = chat.messages.length;
 
   try {
-    const resp = await chatCompletion(token, usedTag, messagesGh);
-    const answer = resp.choices?.[0]?.message?.content || "";
+    DBG("Calling GitHub chat (1st)", { model: usedTag, toolMode: tools && tools.length > 0 ? "auto" : "none" });
+    let resp = await chatCompletion(
+      token,
+      usedTag,
+      messagesGh,
+      tools && tools.length > 0 ? { tools, tool_choice: "auto" } : undefined
+    );
+    DBG(
+      "First response",
+      {
+        contentPreview: String(resp.choices?.[0]?.message?.content || "").slice(0, 200),
+        toolCalls: resp.choices?.[0]?.message?.tool_calls?.length || 0,
+      }
+    );
+
+    let answer = resp.choices?.[0]?.message?.content || "";
+
+    // Handle tool calls if any
+    const toolCalls = resp.choices?.[0]?.message?.tool_calls || [];
+    if (tools && tools.length > 0 && toolCalls.length) {
+      DBG("Tool calls requested", toolCalls.map((tc) => ({ name: tc.function.name, argLen: (tc.function.arguments || "").length })));
+
+      // Convert tool calls to our MCP format and execute
+      const toExec = toolCalls.map((tc) => {
+        let parsed: any = {};
+        try {
+          parsed = JSON.parse(tc.function.arguments || "{}");
+        } catch (e) {
+          DBG("Warn: tool.arguments JSON.parse failed, passing empty object", { name: tc.function.name, err: String(e) });
+        }
+        return { function: { name: tc.function.name, arguments: parsed } } as any;
+      });
+
+      try {
+        if (!McpClient) await InitMcpClient();
+        DBG("Executing MCP tools", toExec.map((t: any) => t.function.name));
+        const results = await McpClient.CallToolsForOllama(toExec);
+        DBG("MCP tools executed", { resultsCount: results?.length || 0 });
+
+        // Append tool results as an assistant tool output then user follow-up
+        messagesGh.push({ role: "assistant", content: answer });
+        messagesGh.push({ role: "assistant", content: `Tool results: ${JSON.stringify(results).slice(0, 512)}...` });
+
+        DBG("Calling GitHub chat (2nd, finalize)");
+        resp = await chatCompletion(token, usedTag, messagesGh, { tools, tool_choice: "none" });
+        DBG(
+          "Second response",
+          {
+            contentPreview: String(resp.choices?.[0]?.message?.content || "").slice(0, 200),
+            toolCalls: resp.choices?.[0]?.message?.tool_calls?.length || 0,
+          }
+        );
+        answer = resp.choices?.[0]?.message?.content || answer;
+      } catch (err) {
+        DBG("MCP tool execution failed", String(err));
+      }
+    }
 
     // append new message and persist model change for ongoing chat when applicable
     setChat((prevState) => {
-      if (prevState) {
-        if (prevState.messages.length === ml) {
-          const nextModels = usedMain
-            ? { ...prevState.models, main: { ...prevState.models.main, tag: usedTag } }
-            : prevState.models;
-          return {
-            ...prevState,
-            models: nextModels,
-            messages: prevState.messages.concat({
-              model: usedTag,
-              created_at: new Date().toISOString(),
-              images: image,
-              files:
-                documents &&
-                documents.map((d) => (d as any).metadata?.source).filter((v, i, a) => a.indexOf(v) === i),
-              messages: [
-                { role: OllamaApiChatMessageRole.USER, content: query },
-                { role: OllamaApiChatMessageRole.ASSISTANT, content: answer },
-              ],
-              done: true,
-            } as any),
-          } as any;
-        }
+      if (!prevState) return prevState;
+      if (prevState.messages.length === ml) {
+        const nextModels = usedMain
+          ? { ...prevState.models, main: { ...prevState.models.main, tag: usedTag } }
+          : prevState.models;
+        const next = {
+          ...prevState,
+          models: nextModels,
+          mcp_enabled: isMcpEnabled(prevState),
+          messages: prevState.messages.concat({
+            model: usedTag,
+            created_at: new Date().toISOString(),
+            images: image,
+            files:
+              documents &&
+              documents.map((d) => (d as any).metadata?.source).filter((v, i, a) => a.indexOf(v) === i),
+            messages: [
+              { role: OllamaApiChatMessageRole.USER, content: query },
+              { role: OllamaApiChatMessageRole.ASSISTANT, content: answer },
+            ],
+            done: true,
+          } as any),
+        } as any;
+        DBG("Chat state updated; message appended");
+        return next;
+      } else {
+        DBG("Chat state changed concurrently; skipping append");
+        return prevState;
       }
     });
     await showToast({ style: Toast.Style.Success, title: "🧠 Inference Done." });
   } catch (e: any) {
+    DBG("Inference error", String(e?.message || e));
     await showToast({ style: Toast.Style.Failure, title: "Error:", message: String(e?.message || e) });
   } finally {
+    DBG("Inference end");
     setLoading(false);
   }
 }
@@ -308,6 +417,7 @@ function DocumentsToJson(documents: Document<Record<string, any>>[]): string {
   for (const document of documents) {
     o.push({ source: (document as any).metadata?.source, content: document.pageContent });
   }
+  DBG("DocumentsToJson", { count: o.length });
   return JSON.stringify(o);
 }
 
@@ -319,6 +429,7 @@ export async function Run(
   setChat: React.Dispatch<React.SetStateAction<RaycastChat | undefined>>,
   setLoading: React.Dispatch<React.SetStateAction<boolean>>
 ): Promise<void> {
+  DBG("Run called");
   setLoading(true);
 
   const context: PromptContext = {};
