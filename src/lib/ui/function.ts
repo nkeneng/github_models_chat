@@ -170,11 +170,11 @@ async function GetImageFromFile(file: string): Promise<RaycastImage> {
   const buffer = fs.readFileSync(decodeURI(file));
   const fileType = await fileTypeFromBuffer(buffer);
   if (fileType && (fileType.mime === "image/jpeg" || fileType.mime === "image/png")) {
-    const src = `file://${encodeURI(file)}`;
+    const base64 = buffer.toString("base64");
     return {
       path: file,
-      html: `<img src="${src}" alt="image" width="300" style="max-width:100%;height:auto;" />\n\n`,
-      base64: buffer.toString("base64"),
+      html: `<img src="data:${fileType.mime};base64,${base64}" alt="image" width="300" style="max-width:100%;height:auto;" />\n\n`,
+      base64,
     };
   } else {
     throw new Error("Only PNG and JPG are supported");
@@ -188,6 +188,7 @@ async function GetImageFromFile(file: string): Promise<RaycastImage> {
  */
 async function GetImageFromUrl(url: string): Promise<RaycastImage | undefined> {
   if (!url.match(/(http(s?):)([/|.|\w|\s|-])/g)) throw new Error("Clipboard do not contain file path or web url");
+  const mimeFromUrl = url.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
   const image = await fetch(url)
     .then((res) => {
       const contentType = res.headers.get("content-type");
@@ -198,10 +199,11 @@ async function GetImageFromUrl(url: string): Promise<RaycastImage | undefined> {
       }
     })
     .then((buffer) => {
+      const base64 = Buffer.from(buffer).toString("base64");
       return {
         path: url,
-        html: `<img src="${url}" alt="image" width="300" style="max-width:100%;height:auto;" />\n\n`,
-        base64: Buffer.from(buffer).toString("base64"),
+        html: `<img src="data:${mimeFromUrl};base64,${base64}" alt="image" width="300" style="max-width:100%;height:auto;" />\n\n`,
+        base64,
       } as RaycastImage;
     });
   return image;

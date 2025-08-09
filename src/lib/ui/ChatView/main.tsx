@@ -391,7 +391,7 @@ export function ChatView(): JSX.Element {
             actions={<ActionMessage message={item} />}
             detail={
               <List.Item.Detail
-                markdown={`${item.images ? `${item.images.map((i) => i.html)}\n` : ""}${item.messages[1].content}`}
+                markdown={`${item.images ? `${item.images.map((i) => i.html).join("")}\n` : ""}${item.messages[1].content}`}
                 metadata={item.done && ShowAnswerMetadata && <DetailMetadataMessage message={item} />}
               />
             }

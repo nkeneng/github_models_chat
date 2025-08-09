@@ -4,7 +4,7 @@
   "title": "GitHub Models Chat",
   "description": "Chat with GitHub Models",
   "icon": "icon.png",
-  "author": "StevenNkeneng",
+  "author": "snkeneng",
   "categories": [
     "Productivity"
   ],
@@ -257,12 +257,12 @@
     }
   ],
   "dependencies": {
-    "@langchain/community": "^0.2.0",
-    "@modelcontextprotocol/sdk": "^1.8.0",
-    "@raycast/api": "^1.55.2",
-    "@raycast/utils": "^1.9.0",
+    "@langchain/community": "^0.3.50",
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "@raycast/api": "^1.102.0",
+    "@raycast/utils": "^2.2.0",
     "file-type": "^19.0.0",
-    "langchain": "^0.2.0",
+    "langchain": "^0.3.30",
     "mammoth": "^1.7.2",
     "mime-types": "^2.1.35",
     "node-fetch": "^3.3.2",

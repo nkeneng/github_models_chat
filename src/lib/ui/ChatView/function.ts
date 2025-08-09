@@ -16,6 +16,9 @@ import {
   environment,
 } from "@raycast/api";
 
+// Simple debug logger
+const DBG = (...args: any[]) => console.log(`[Chat][Inference]`, new Date().toISOString(), ...args);
+
 // Helper to infer MIME type from file path (fallback to image/jpeg)
 function inferMime(path?: string): string {
   if (!path) return "image/jpeg";
@@ -275,7 +278,8 @@ async function Inference(
     const parts: GitHubContentPart[] = [{ type: "text", text: last.content }];
     for (const img of image) {
       const mime = inferMime(img.path);
-      parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64.substring(0, 16)}...` } });
+      // IMPORTANT: send full base64, do not truncate
+      parts.push({ type: "image_url", image_url: { url: `data:${mime};base64,${img.base64}` } });
     }
     userContent = parts;
   }
