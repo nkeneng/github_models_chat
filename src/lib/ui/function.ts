@@ -3,12 +3,10 @@ import {
   getPreferenceValues,
   getSelectedText,
   Clipboard,
-  showToast,
-  Toast,
   getSelectedFinderItems,
   BrowserExtension,
-  LocalStorage,
 } from "@raycast/api";
+import { showFailureToast } from "@raycast/utils";
 import { Preferences, RaycastImage } from "../types";
 import {
   ErrorRaycastBrowserExtantion,
@@ -62,8 +60,8 @@ export async function GetModels(): Promise<Map<string, UiModelDetails[]>> {
       return { name: m.id, capabilities: caps, meta, summary: m.summary, url: m.html_url };
     });
     map.set("GitHub", items);
-  } catch (e: any) {
-    await showToast({ style: Toast.Style.Failure, title: "GitHub Models", message: String(e?.message || e) });
+  } catch (e: unknown) {
+    showFailureToast(e as Error, { title: "GitHub Models" });
     map.set("GitHub", []);
   }
   return map;

@@ -1,7 +1,7 @@
 import * as Types from "./types";
 import * as React from "react";
 // import { Ollama } from "../../ollama/ollama";
-import { OllamaApiGenerateRequestBody, OllamaApiGenerateResponse } from "../../ollama/types";
+import { OllamaApiGenerateResponse } from "../../ollama/types";
 import { CommandAnswer } from "../../settings/enum";
 import { AddSettingsCommandChat, GetOllamaServerByName, GetSettingsCommandAnswer } from "../../settings/settings";
 import { launchCommand, LaunchType, showToast, Toast, getPreferenceValues, LocalStorage } from "@raycast/api";
@@ -44,7 +44,6 @@ export async function GetModel(command?: CommandAnswer, server?: string, model?:
   if (!resolvedServer || !resolvedModel) throw new Error("server and model need to be defined");
 
   // Build a minimal UiModel using available models list
-  const s = await GetOllamaServerByName(resolvedServer);
   const available = await GetAvailableModel(resolvedServer);
   const match = available.find((m) => m.name === resolvedModel);
   if (!match) throw new Error("Model unavailable on given server");
@@ -116,6 +115,8 @@ async function Inference(
   creativity: Creativity = Creativity.Medium,
   keep_alive?: string
 ): Promise<void> {
+  void creativity;
+  void keep_alive;
   await showToast({ style: Toast.Style.Animated, title: "🧠 Inference." });
 
   try {
@@ -143,8 +144,9 @@ async function Inference(
     const answer = resp.choices?.[0]?.message?.content || "";
     setAnswer(answer);
     await showToast({ style: Toast.Style.Success, title: "🧠 Inference Done." });
-  } catch (err: any) {
-    await showToast({ style: Toast.Style.Failure, title: "Error", message: String(err?.message || err) });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    await showToast({ style: Toast.Style.Failure, title: "Error", message });
   } finally {
     setLoading(false);
   }
@@ -194,7 +196,7 @@ export async function Run(
       const catalog = await listCatalog(token);
       const vision = catalog.find((m) => m.supported_input_modalities?.includes("image"));
       if (vision && vision.id && vision.id !== model.tag.name) {
-        modelToUse = { ...model, tag: { ...model.tag, name: vision.id } } as any;
+        modelToUse = { ...model, tag: { ...model.tag, name: vision.id } };
       }
     } catch {
       // ignore; fallback to current model

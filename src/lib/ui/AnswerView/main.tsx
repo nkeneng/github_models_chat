@@ -181,13 +181,26 @@ export function AnswerView(props: props): JSX.Element {
     );
   }
 
-  if (answer === "")
+  if (answer === "") {
+    const needsSelectionHint = props.prompt?.match(/\{\s*selection\s*\}/i);
+    const title = loading || IsLoadingModel ? "Loading…" : needsSelectionHint ? "Select text to get started" : "Ready";
+    const description =
+      loading || IsLoadingModel
+        ? undefined
+        : needsSelectionHint
+        ? "No text selected. Select some text or enable clipboard fallback in Preferences."
+        : "Type, select content, or attach inputs to run.";
     return (
       <List isLoading={loading || IsLoadingModel} actions={!loading && !IsLoadingModel && <AnswerAction />}>
         {""}
-        <List.EmptyView icon={Icon.CircleProgress} title="Loading Model" />
+        <List.EmptyView
+          icon={loading || IsLoadingModel ? Icon.CircleProgress : Icon.Text}
+          title={title}
+          description={description}
+        />
       </List>
     );
+  }
 
   return (
     <Detail
